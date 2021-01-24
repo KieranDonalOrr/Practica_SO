@@ -34,9 +34,9 @@ int inicializacion(char *args)
 
     printf("DATO: %p\n", data);
 
-    my_stack_write(stack_prueba, "fichero.txt");
+    my_stack_write(stack_prueba, "s2-6el");
 
-    stack_salida = my_stack_read("fichero.txt");
+    stack_salida = my_stack_read("s2-6el");
 
     for (int i = 0; i < my_stack_len(stack_salida); i++)
     {
