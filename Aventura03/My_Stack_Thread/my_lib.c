@@ -101,7 +101,7 @@ struct my_stack *my_stack_init(int size)
     stack = malloc(sizeof(struct my_stack));
     //Se inicializa las variables internas de stack
     stack->top = NULL;
-    stack->size = size;
+    stack->size = 4;
 
     return stack;
 }
@@ -208,6 +208,7 @@ int my_stack_write(struct my_stack *stack, char *filename)
     {
         //Obtenemos el largo de la pila con la funcion "my_stack_len"
         int lenght = my_stack_len(stack);
+        printf("Stack lenght: %d", lenght);
         //Inicializamos una pila auxiliar en la que volcaremos los datos
         struct my_stack *aux_stack = my_stack_init(lenght);
         //Inicializamos un puntero para recorrer la pila
@@ -229,13 +230,17 @@ int my_stack_write(struct my_stack *stack, char *filename)
         int longitud_aux = my_stack_len(aux_stack);
 
         //Escribimos la cantidad de elementos que se escribiran en el fichero
-        write(fichero, buff, sizeof(stack->size));
+        buff=4;
+        printf("EScribiendo: %d \n",buff);
+        
+        write(fichero, buff, 4);
 
         //Recorremos la pila auxiliar escribiendo los datos en el fichero en el orden correcto
         for (int j = 0; j < longitud_aux; j++)
         {
             buff = my_stack_pop(aux_stack);
-            write(fichero, buff, stack->size);
+            printf("EScribiendo: %d \n",buff);
+            write(fichero, buff, 4);
             contador_elementos++;
         }
         //Liberamos la memoria ocupada por la pila auxiliar
@@ -262,9 +267,9 @@ struct my_stack *my_stack_read(char *filename)
     }
     else
     {
-
+        printf("Estoy leyendo \n");
         void *buff;
-        int size;
+        int size = 4;
 
         //Leemos el primer dato del fichero que es la cantidad de elementos que deberemos leer
         read(fichero, &size, sizeof(int));
@@ -275,8 +280,10 @@ struct my_stack *my_stack_read(char *filename)
         int contador = 0;
 
         //Recorremos el fichero y vamos escribiendo los elementos en la pila con la funcion "my_stack_push"
-        while (read(fichero, buff, size) != 0)
+        printf("Voy a empezar a leer");
+        while (read(fichero, buff, size) != NULL)
         {
+            printf("%d",buff);
             my_stack_push(stack, buff);
             buff = malloc(size);
             contador++;
