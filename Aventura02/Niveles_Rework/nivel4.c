@@ -31,6 +31,8 @@ char current_directory[100];
 char *vector_tokens[10];
 char *token;
 char *token_export;
+char *token_reaper;
+char *token_ctrc;
 
 //Declaraciones de los Metodos
 char *read_line(char *line);
@@ -46,6 +48,7 @@ int internal_bg(char **args);
 int internal_exit(char **args);
 int internal_clear(char **args);
 int internal_fork(char **args);
+void imprimir_prompt();
 
 //Struct
 struct info_process
@@ -55,15 +58,77 @@ struct info_process
     char cmd[sizeof(linea_buff)]; // línea de comando
 };
 
+//Array de Trabajos Global
+static struct info_process jobs_list[64];
+
+//Manejador del Reaper
+void reaper(int signum)
+{
+    //Variables
+    pid_t end;
+    int wstatus;
+
+    //Asociamos SIGCHLD al manejador reaper
+    signal(SIGCHLD, reaper);
+
+    while ((end = waitpid(-1, &wstatus, WNOHANG)) > 0)
+    {
+
+        token_reaper = strtok(jobs_list[0].cmd, "\n");
+
+        //Devolver el estado de finalizacion del hijo
+        if (WIFEXITED(wstatus))
+        {
+            printf("[reaper()→ Proceso hijo %d (%s) finalizado con estado: %d]\n", end, token_reaper, WEXITSTATUS(wstatus));
+        }
+        else if (WIFSIGNALED(wstatus))
+        {
+            printf("[reaper()→ Proceso hijo %d (%s) finalizado con la señal: %d]\n", end, token_reaper, WTERMSIG(wstatus));
+        }
+        else if (WIFSTOPPED(wstatus))
+        {
+            printf("[reaper()→ Proceso hijo %d (%s) finalizado con la señal: %d]\n", end, token_reaper, WIFSTOPPED(wstatus));
+        }
+
+        //Establecemos estados
+        jobs_list[0].pid = 0;
+        jobs_list[0].status = 'F';
+        jobs_list[0].cmd[0] = '\0';
+    }
+}
+
 //Manejador Ctrl C
 void ctrlc(int signum)
 {
+    token_ctrc = strtok(jobs_list[0].cmd, "\n");
+    printf("\n[ctrlc()→ Soy el proceso con PID %d, el proceso en foreground es %d (%s)]\n", getpid(), jobs_list[0].pid, token_ctrc);
+    fflush(stdout);
 
-    return;
+    //Comprobamos si hay un proceso en foreground
+    if (jobs_list[0].pid > 0)
+    {
+        if (strcmp(linea_buff, jobs_list[0].cmd) != 0)
+        {
+            //token_ctrc = strtok(jobs_list[0].cmd, "\n");
+            printf("[ctrlc()→ Señal %d enviada a PID %d (%s) por %d]\n", SIGTERM, jobs_list[0].pid, token_ctrc, getpid());
+            kill(jobs_list[0].pid, SIGTERM);
+        }
+        else
+        {
+            printf("[ctrlc()→ Señal %d no enviada por PID %d debido a que el proceso en foreground es el shell]\n", SIGTERM, getpid());
+            fflush(stdout);
+        }
+    }
+    else
+    {
+        printf("[ctrlc()→ Señal %d no enviada por PID %d debido a que no hay proceso en foreground]\n", SIGTERM, getpid());
+        fflush(stdout);
+        imprimir_prompt();
+    }
 }
 
 //Metodo que imprime nuestro prompt
-int imprimir_prompt()
+void imprimir_prompt()
 {
     //Impresion de prueba
     /*
@@ -94,8 +159,6 @@ int imprimir_prompt()
     printf(GRN "[%s]", getenv("USER"));
     printf(BLU "[%s]" WHT ":", current_directory);
     fflush(stdout);
-
-    return 0;
 }
 
 //Metodo para leer la linea de comando
@@ -121,6 +184,9 @@ char *read_line(char *line)
 //Metodo para pasar la linea a parse_args y los tokens a check_internal
 int execute_line(char *line)
 {
+
+    strcpy(jobs_list[0].cmd, line);
+
     if (parse_args(vector_tokens, line) != 0)
     {
         if (check_internal(vector_tokens) == 1)
@@ -393,6 +459,8 @@ int internal_fork(char **args)
 
     pid_fork = fork();
 
+    jobs_list[0].pid = pid_fork;
+
     if (pid_fork == 0)
     {
 
@@ -411,16 +479,11 @@ int internal_fork(char **args)
     {
         printf("[execute_line()→ PID padre: %d]\n", getpid());
 
-        wait(&wstatus);
+        while (jobs_list[0].pid > 0)
+        {
 
-        //Devolver el estado de finalizacion del hijo
-        if (WIFEXITED(wstatus))
-        {
-            printf("[execute_line()→ Proceso hijo %d finalizado con estado: %d]\n", pid_fork, WEXITSTATUS(wstatus));
-        }
-        else if (WIFSIGNALED(wstatus))
-        {
-            printf("[execute_line()→ Proceso hijo %d finalizado con la señal: %d]\n", pid_fork, WTERMSIG(wstatus));
+            //Pausamos al Padre
+            pause();
         }
 
         return EXIT_SUCCESS;
@@ -437,6 +500,9 @@ int internal_fork(char **args)
 int main()
 {
     in_minishell = true;
+
+    signal(SIGCHLD, reaper);
+    signal(SIGINT, ctrlc);
 
     //Bucle infinito Leer y Ejecutar (Añadimos la impresión del encabezado)
     while (in_minishell != false)
