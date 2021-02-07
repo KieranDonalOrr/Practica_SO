@@ -33,6 +33,7 @@ char *token;
 char *token_export;
 char *token_reaper;
 char *token_ctrc;
+char *token_ctrz;
 
 //Declaraciones de los Metodos
 char *read_line(char *line);
@@ -220,7 +221,6 @@ void ctrlc(int signum)
             //token_ctrc = strtok(jobs_list[0].cmd, "\n");
             printf("[ctrlc()→ Señal %d enviada a PID %d (%s) por %d]\n", SIGTERM, jobs_list[0].pid, token_ctrc, getpid());
             kill(jobs_list[0].pid, SIGTERM);
-            imprimir_prompt();
         }
         else
         {
@@ -239,19 +239,26 @@ void ctrlc(int signum)
 void ctrlz(int signum)
 {
 
-    int i = SIGTERM;
+    int i = SIGSTOP;
+
+        token_ctrz = strtok(jobs_list[0].cmd, "\n");
+    
+   
+    printf("\n[ctrlz()→ Soy el proceso con PID %d, el proceso en foreground es %d (%s)]\n", getpid(), jobs_list[0].pid, token_ctrz);
+    fflush(stdout);
 
     if (jobs_list[0].pid > 0)
     {
-        if (jobs_list[0].pid != getppid())
+        if (strcmp(linea_buff, jobs_list[0].cmd) != 0)
         {
-            kill(jobs_list[0].pid, SIGSTOP);
+
             printf("\nCTRL Z ===> Señal %d enviada a %d (%s) por %d\n ", i, jobs_list[0].pid, jobs_list[0].cmd, getpid());
             jobs_list_add(jobs_list[0].pid, 'D', jobs_list[0].cmd);
             //ESTABLECEMOS ESTADO
             jobs_list[0].status = 'F';
             //ESTABLECEMOS PID
             jobs_list[0].pid = 0;
+            kill(jobs_list[npids].pid, SIGSTOP);
             //ESTABLECEMOS EL CAMPO DE COMANDO
             for (int i = 0; i < sizeof(linea_buff); i++)
             {
@@ -260,12 +267,14 @@ void ctrlz(int signum)
         }
         else
         {
-            printf("\nSeñal %d no enviada debido a que el proceso en foreground es el shell\n", i);
+            printf("[ctrlz()→ Señal %d no enviada por PID %d debido a que el proceso en foreground es el shell]\n", SIGSTOP, getpid());
+            fflush(stdout);
         }
     }
     else
     {
-        printf("\nSeñal %d no enviada debido a que no hay proceso en foreground\n", i);
+        printf("[ctrlz()→ Señal %d no enviada por PID %d debido a que no hay proceso en foreground]\n", SIGSTOP, getpid());
+        fflush(stdout);
     }
     return;
 }
@@ -396,10 +405,13 @@ int parse_args(char **args, char *line)
     }
 
     //Quitamos el token comentario
-    for (; args[array_tokens][0] == '#'; array_tokens--)
+    if (array_tokens != 0)
     {
-        args[array_tokens] = NULL;
-    };
+        for (; args[array_tokens][0] == '#'; array_tokens--)
+        {
+            args[array_tokens] = NULL;
+        };
+    }
 
     return num_tokens;
 }
@@ -637,12 +649,12 @@ int internal_fg(char **args)
     if (jobs_list[i].status == 'D')
     {
 
-        kill(jobs_list[i].pid, SIGCONT);
         jobs_list[0].pid = jobs_list[i].pid;
         strcat(jobs_list[0].cmd, jobs_list[i].cmd);
         jobs_list[0].status = 'E';
         jobs_list_remove(i);
         printf("\n[internal_fg()→ Señal %d (SIGCONT) enviada a %d (%s)]\n", SIGCONT, jobs_list[0].pid, jobs_list[0].cmd);
+        kill(jobs_list[i].pid, SIGCONT);
     }
     else
     {
@@ -693,10 +705,11 @@ int internal_bg(char **args)
 
     if (jobs_list[i].status == 'D')
     {
-        kill(jobs_list[i].pid, SIGCONT);
+
         jobs_list[i].status = 'E';
 
         printf("\n[internal_bg()→ Señal %d (SIGCONT) enviada a %d (%s)]\n", SIGCONT, jobs_list[i].pid, jobs_list[i].cmd);
+        kill(jobs_list[i].pid, SIGCONT);
     }
     else
     {
@@ -713,6 +726,9 @@ int internal_fork(char **args, bool background)
     int wstatus;
 
     pid_fork = fork();
+    signal(SIGTSTP, SIG_IGN);
+        signal(SIGINT, SIG_IGN);
+        signal(SIGCHLD, SIG_DFL);
 
     for (int i = 0; args[i] != NULL; i++)
     {
@@ -721,10 +737,9 @@ int internal_fork(char **args, bool background)
     }
 
     if (pid_fork == 0)
+    
     {
-        signal(SIGTSTP, SIG_IGN);
-        signal(SIGINT, SIG_IGN);
-        signal(SIGCHLD, SIG_DFL);
+        
 
         printf("[execute_line()→ PID hijo: %d]\n", getpid());
 
@@ -782,6 +797,7 @@ int main()
     //Bucle infinito Leer y Ejecutar (Añadimos la impresión del encabezado)
     while (in_minishell != false)
     {
+        usleep(10000);
         imprimir_prompt();
 
         if (read_line(linea_buff))
