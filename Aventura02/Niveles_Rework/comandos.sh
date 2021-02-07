@@ -1,4 +1,3 @@
-ls
 date
 file nivel3.c
 ps
