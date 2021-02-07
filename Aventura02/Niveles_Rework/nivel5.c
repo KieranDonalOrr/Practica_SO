@@ -236,6 +236,40 @@ void ctrlc(int signum)
     }
 }
 
+void ctrlz(int signum)
+{
+
+    int i = SIGTERM;
+
+    if (jobs_list[0].pid > 0)
+    {
+        if (jobs_list[0].pid != getppid())
+        {
+            kill(jobs_list[0].pid, SIGSTOP);
+            printf("\nCTRL Z ===> Señal %d enviada a %d (%s) por %d\n ", i, jobs_list[0].pid, jobs_list[0].cmd, getpid());
+            jobs_list_add(jobs_list[0].pid, 'D', jobs_list[0].cmd);
+            //ESTABLECEMOS ESTADO
+            jobs_list[0].status = 'F';
+            //ESTABLECEMOS PID
+            jobs_list[0].pid = 0;
+            //ESTABLECEMOS EL CAMPO DE COMANDO
+            for (int i = 0; i < sizeof(linea_buff); i++)
+            {
+                jobs_list[0].cmd[i] = '\0'; //LLENAMOS EL CAMPO DE COMANDO CON EL VALOR NULO
+            }
+        }
+        else
+        {
+            printf("\nSeñal %d no enviada debido a que el proceso en foreground es el shell\n", i);
+        }
+    }
+    else
+    {
+        printf("\nSeñal %d no enviada debido a que no hay proceso en foreground\n", i);
+    }
+    return;
+}
+
 bool is_background()
 {
     //Variable indice para navegar por el vector de tokens
@@ -353,7 +387,6 @@ int parse_args(char **args, char *line)
 
         num_tokens++;
 
-
         token = strtok(NULL, delimiters);
 
         if (token != NULL)
@@ -377,32 +410,32 @@ int check_internal(char **args)
 
     if (strcmp(args[0], "cd") == 0)
     {
-        
+
         internal_cd(vector_tokens);
     }
     else if (strcmp(args[0], "export") == 0)
     {
-        
+
         internal_export(vector_tokens);
     }
     else if (strcmp(args[0], "source") == 0)
     {
-        
+
         internal_source(vector_tokens);
     }
     else if (strcmp(args[0], "jobs") == 0)
     {
-        
+
         internal_jobs(vector_tokens);
     }
     else if (strcmp(args[0], "fg") == 0)
     {
-        
+
         internal_fg(vector_tokens);
     }
     else if (strcmp(args[0], "bg") == 0)
     {
-        
+
         internal_bg(vector_tokens);
     }
     else if (strcmp(args[0], "exit") == 0)
@@ -413,7 +446,7 @@ int check_internal(char **args)
     }
     else if (strcmp(args[0], "clear") == 0)
     {
-        
+
         system("clear");
     }
     else
@@ -613,18 +646,21 @@ int internal_fg(char **args)
     }
     else
     {
-        if(i<=npids){
-        jobs_list[0].pid = jobs_list[i].pid;
-        strcat(jobs_list[0].cmd, jobs_list[i].cmd);
-        jobs_list[0].status = 'E';
-        jobs_list_remove(i);
-        printf("\n%s\n", jobs_list[i].cmd);}
-        else{
+        if (i <= npids)
+        {
+            jobs_list[0].pid = jobs_list[i].pid;
+            strcat(jobs_list[0].cmd, jobs_list[i].cmd);
+            jobs_list[0].status = 'E';
+            jobs_list_remove(i);
+            printf("\n%s\n", jobs_list[i].cmd);
+        }
+        else
+        {
             printf("\nNo hay ningun processo en esta posicion\n");
         }
     };
 
-    while (jobs_list[0].pid >0)
+    while (jobs_list[0].pid > 0)
     {
         pause();
     }
@@ -686,6 +722,9 @@ int internal_fork(char **args, bool background)
 
     if (pid_fork == 0)
     {
+        signal(SIGTSTP, SIG_IGN);
+        signal(SIGINT, SIG_IGN);
+        signal(SIGCHLD, SIG_DFL);
 
         printf("[execute_line()→ PID hijo: %d]\n", getpid());
 
@@ -703,8 +742,10 @@ int internal_fork(char **args, bool background)
         printf("[execute_line()→ PID padre: %d]\n", getpid());
         if (background)
         {
-
+            strcat(jobs_list[0].cmd, " ");
+            strcat(jobs_list[0].cmd, "&");
             jobs_list_add(pid_fork, 'E', jobs_list[0].cmd);
+            printf("[%d] %d   %c   %s \n", npids, jobs_list[npids].pid, jobs_list[npids].status, jobs_list[npids].cmd);
             return EXIT_SUCCESS;
         }
         else
@@ -736,6 +777,7 @@ int main()
 
     signal(SIGCHLD, reaper);
     signal(SIGINT, ctrlc);
+    signal(SIGTSTP, ctrlz);
 
     //Bucle infinito Leer y Ejecutar (Añadimos la impresión del encabezado)
     while (in_minishell != false)
